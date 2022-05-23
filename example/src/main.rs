@@ -1,6 +1,7 @@
 use chela::Column;
-use chela::ToEntity;
 use chela::Entity;
+use chela::Schema;
+use chela::ToEntity;
 
 #[derive(ToEntity)]
 struct Point {
@@ -15,6 +16,6 @@ fn main() {
         x: 2,
         y: 3,
     };
-    let schema = point.to_entity();
-    println!("{:#?}", schema);
+    let schema = Schema::new(vec![Box::new(point)]);
+    println!("{}", schema.run());
 }
