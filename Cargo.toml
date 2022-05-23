@@ -1,0 +1,2 @@
+[workspace]
+members = ["example", "chela", "chela_derive"]
