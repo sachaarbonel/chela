@@ -10,6 +10,7 @@ struct Point {
     y: i32,
 }
 
+
 fn main() {
     let point = Point {
         name: "origin".to_string(),
@@ -17,5 +18,6 @@ fn main() {
         y: 3,
     };
     let schema = Schema::new(vec![Box::new(point)]);
+    // point::insert()
     println!("{}", schema.run());
 }

@@ -1,2 +1,2 @@
 [workspace]
-members = ["example", "chela", "chela_derive"]
+members = ["example", "chela", "chela_derive","chela_query"]
