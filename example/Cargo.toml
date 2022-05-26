@@ -7,3 +7,6 @@ edition = "2021"
 
 [dependencies]
 chela = { path = "../chela"}
+chela_query = { path = "../chela_query"}
+tokio-postgres = "0.7.6"
+async-trait = "0.1.53"

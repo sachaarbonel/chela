@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::{Statements, Column, CreateStmt, Statement};
+use crate::{Migrations, Column, CreateStmt, Statement};
 
 
 struct DisplaySeparated<'a, T>
@@ -67,7 +67,7 @@ impl Display for Statement {
 }
 
 
-impl fmt::Display for Statements {
+impl fmt::Display for Migrations {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for v in &self.0 {
             write!(f, "{}", v)?;

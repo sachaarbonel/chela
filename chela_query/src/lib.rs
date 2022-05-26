@@ -1,6 +1,6 @@
 use core::fmt;
 use std::fmt::Display;
-mod builder;
+pub mod builder;
 mod display;
 #[derive(Debug, PartialEq)]
 pub enum SelectItem {
@@ -53,7 +53,7 @@ pub enum Expr {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Query, Select, SelectItem, SetExpr, builder::QueryBuilder};
+    use crate::{builder::QueryBuilder, Query, Select, SelectItem, SetExpr};
 
     #[test]
     fn query_test() {
@@ -87,7 +87,6 @@ mod tests {
             .select()
             .from("users".to_string())
             .order_by(Some("id".to_string()))
-            .limit(Some(1))
             .limit(Some(1))
             .build();
         assert_eq!(find_first_user(), built_query);

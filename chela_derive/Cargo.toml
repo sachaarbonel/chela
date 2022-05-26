@@ -8,6 +8,10 @@ edition = "2021"
 [dependencies]
 syn = "1.0"
 quote = "1.0"
+# chela_query = { path = "../chela_query"}
+# async-trait = "0.1.53"
+# chela_query = { path = "../chela_query"}
+# tokio-postgres = "0.7.6"
 
 [lib]
 proc-macro = true

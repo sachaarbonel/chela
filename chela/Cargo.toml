@@ -6,4 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1.53"
 chela_derive = { path = "../chela_derive"}
+chela_query = { path = "../chela_query"}
+futures = "0.3.21"
+# list-any = "0.2.0"
+tokio-postgres = "0.7.6"
