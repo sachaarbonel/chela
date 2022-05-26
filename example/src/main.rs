@@ -2,7 +2,7 @@ use async_trait::async_trait;
 // use chela::Column;
 // use chela::Entity;
 // use chela::Schema;
-use chela::*;
+use chela::{*, migrator::MigrationRunner};
 use chela_query::builder::QueryBuilder;
 use std::{any::Any, rc::Rc};
 // use chela_query::runner::QueryRunner;

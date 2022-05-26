@@ -40,46 +40,46 @@ pub fn derive_signature(item: TokenStream) -> TokenStream {
     let repository = format_ident!("{}{}", struct_name, "Repository");
     let mut table_name = struct_name.to_string().to_lowercase();
     table_name.push('s');
+    let entity = quote! {Entity {
+        table_name: #table_name.to_string(),
+        struct_name: #struct_name_str.to_string(),
+        columns:
+        vec![
+            #( Column {
+                column_name: #keys.to_string(),
+                column_type: stringify!(#types).to_string(),
+            }
+            ),*
+        ]
+    }};
     let expanded = quote! {
         impl ToEntity for #struct_name {
             fn to_entity(&self)->Entity {
 
-                Entity {
-                    table_name: #table_name.to_string(),
-                    struct_name: #struct_name_str.to_string(),
-                    columns:
-                    vec![
-                        #( Column {
-                            column_name: #keys.to_string(),
-                            column_type: stringify!(#types).to_string(),
-                        }
-                        ),*
-                    ]
-                }
+                #entity
             }
         }
 
         struct #repository {
-            table_name: &'static str,
+            entity: Entity,
         }
 
         impl Repository for #repository {
-            fn table_name(&self) -> &'static str{
-                self.table_name
+            fn entity(self) -> Entity{
+                self.entity
             }
             fn as_any(&self) -> &dyn Any{
                 self
             }
-            
+
         }
 
         impl #repository {
             pub fn new() -> #repository {
-                PointRepository {
-                   table_name: #table_name,
+                #repository {
+                   entity: #entity,
                }
             }
-
 
         }
 
@@ -101,10 +101,10 @@ pub fn derive_signature(item: TokenStream) -> TokenStream {
         where  #struct_name : ToEntity
         {
             type Output = #struct_name;
-            async fn first(&self, client: &Client)->Self::Output {
+            async fn first(self, client: &Client)->Self::Output {
                 let first_query = QueryBuilder::new()
                     .select()
-                    .from(self.table_name.to_string())
+                    .from(self.entity().table_name.to_string())
                     .order_by(Some("id".to_string()))
                     .limit(Some(1))
                     .build();

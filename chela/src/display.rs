@@ -1,7 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::{Migrations, Column, CreateStmt, Statement};
-
+use crate::{Column, CreateStmt, Statement, migrator::Migrations};
 
 struct DisplaySeparated<'a, T>
 where
@@ -57,7 +56,6 @@ impl Display for Column {
     }
 }
 
-
 impl Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -65,7 +63,6 @@ impl Display for Statement {
         }
     }
 }
-
 
 impl fmt::Display for Migrations {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -75,4 +72,3 @@ impl fmt::Display for Migrations {
         Ok(())
     }
 }
-

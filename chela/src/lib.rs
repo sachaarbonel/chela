@@ -1,7 +1,8 @@
-mod display;
-
+pub mod display;
+pub mod migrator;
 pub use chela_derive::*;
 use futures::future::join_all;
+use migrator::{Migrations, Migrator};
 use std::any::Any;
 use std::rc::Rc;
 use std::{any::TypeId, collections::HashMap};
@@ -11,11 +12,11 @@ use tokio_postgres::Client;
 #[async_trait]
 pub trait QueryRunner {
     type Output;
-    async fn first(&self, client: &Client) -> Self::Output;
+    async fn first(self, client: &Client) -> Self::Output;
 }
 
-pub trait Repository: Any + Send + Sync {
-    fn table_name(&self) -> &'static str;
+pub trait Repository {
+    fn entity(self) -> Entity;
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -42,27 +43,6 @@ pub struct CreateStmt {
     columns: Vec<Column>,
 }
 
-trait Migrator {
-    fn create_table(self) -> CreateStmt;
-}
-
-#[async_trait]
-pub trait MigrationRunner {
-    async fn run(&self, client: &Client);
-}
-
-impl Migrator for Entity {
-    fn create_table(self) -> CreateStmt {
-        let mut create_stmt = CreateStmt {
-            table_name: self.table_name.to_string(),
-            columns: Vec::new(),
-        };
-        for column in self.columns.into_iter() {
-            create_stmt.columns.push(column);
-        }
-        create_stmt
-    }
-}
 #[derive(Clone)]
 pub struct Schema {
     entities: Vec<Entity>,
@@ -71,32 +51,6 @@ pub struct Schema {
 #[derive(Clone)]
 pub enum Statement {
     CreateStmt(CreateStmt),
-}
-
-pub struct Migrations(Vec<Statement>);
-
-impl Migrations {
-    pub fn new(statements: &'static [Statement]) -> Migrations {
-        Migrations(statements.to_vec())
-    }
-
-    pub fn add_migration(mut self, migration: Statement) {
-        self.0.push(migration);
-    }
-}
-
-#[async_trait]
-impl MigrationRunner for Statement {
-    async fn run(&self, client: &Client) {
-        let statement = self.to_string();
-        let row = client.execute(&statement.to_string(), &[]).await.unwrap();
-    }
-}
-#[async_trait]
-impl MigrationRunner for Migrations {
-    async fn run(&self, client: &Client) {
-        join_all(self.0.iter().map(|statement| statement.run(&client))).await;
-    }
 }
 
 impl Schema {
