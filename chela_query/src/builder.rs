@@ -1,4 +1,4 @@
-use crate::{SelectItem, Expr, Select, SetExpr, Query};
+use crate::{query::SelectItem, query::Expr, query::Select, query::SetExpr, query::QueryStmt};
 
 
 
@@ -69,8 +69,8 @@ impl QueryBuilder {
         self
     }
 
-    pub fn build(self) -> Query {
-        Query {
+    pub fn build(self) -> QueryStmt {
+        QueryStmt {
             body: SetExpr::Select(Box::new(Select {
                 projection: self.projection,
                 from: self.from,

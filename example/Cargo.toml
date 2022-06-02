@@ -10,3 +10,4 @@ chela = { path = "../chela"}
 chela_query = { path = "../chela_query"}
 tokio-postgres = "0.7.6"
 async-trait = "0.1.53"
+itertools = "0.10.3"

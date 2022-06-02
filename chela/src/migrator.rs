@@ -1,8 +1,11 @@
+use std::fmt::Display;
+
 use async_trait::async_trait;
+use chela_query::create::CreateStmt;
 use futures::future::join_all;
 use tokio_postgres::Client;
 
-use crate::{CreateStmt, Entity, Statement};
+use crate::{Entity, Statement};
 
 pub trait Migrator {
     fn create_table(self) -> CreateStmt;
@@ -26,13 +29,18 @@ impl Migrator for Entity {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Migrations(pub Vec<Statement>);
 
-impl Migrations {
-    pub fn new(statements: &'static [Statement]) -> Migrations {
-        Migrations(statements.to_vec())
+impl Display for Migrations{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for statement in self.0.iter() {
+            write!(f, "{}", statement)?;
+        }
+        Ok(())
     }
-
+}
+impl Migrations {
     pub fn add_migration(mut self, migration: Statement) {
         self.0.push(migration);
     }

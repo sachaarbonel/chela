@@ -1,6 +1,7 @@
-pub mod display;
 pub mod migrator;
 pub use chela_derive::*;
+use chela_query::create::Column;
+use chela_query::statement::Statement;
 use futures::future::join_all;
 use migrator::{Migrations, Migrator};
 use std::any::Any;
@@ -12,7 +13,7 @@ use tokio_postgres::Client;
 #[async_trait]
 pub trait QueryRunner {
     type Output;
-    async fn first(self, client: &Client) -> Self::Output;
+    async fn list(self, client: &Client) -> Vec<Self::Output>;
 }
 
 pub trait Repository {
@@ -21,7 +22,7 @@ pub trait Repository {
 }
 
 pub trait ToEntity {
-    fn to_entity(&self) -> Entity;
+    fn to_entity() -> Entity;
 }
 
 #[derive(Debug, Clone)]
@@ -29,39 +30,29 @@ pub struct Entity {
     pub table_name: String,
     pub struct_name: String, // the struct to be parse, like the User struct above.
     pub columns: Vec<Column>, // the struct's fields
+    pub has_many: Vec<HasMany>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Column {
-    pub column_name: String,
-    pub column_type: String,
+#[derive(Debug, Clone)]
+pub struct HasMany {
+    pub foreign_key: String,
+    pub struct_name: String,
+    pub table_name: String,
 }
-
-#[derive(PartialEq, Clone)]
-pub struct CreateStmt {
-    table_name: String,
-    columns: Vec<Column>,
-}
-
 #[derive(Clone)]
 pub struct Schema {
     entities: Vec<Entity>,
 }
 
-#[derive(Clone)]
-pub enum Statement {
-    CreateStmt(CreateStmt),
-}
-
 impl Schema {
-    pub fn new(entities: Vec<Box<dyn ToEntity>>) -> Self {
-        let concrete_entities: Vec<Entity> = entities
-            .into_iter()
-            .map(|entity| entity.to_entity())
-            .collect();
+    pub fn new(entities: Vec<Entity>) -> Self {
+        // let concrete_entities: Vec<Entity> = entities
+        //     .into_iter()
+        //     .map(|entity| entity.to_entity())
+        //     .collect();
 
         Schema {
-            entities: concrete_entities,
+            entities, //: concrete_entities,
         }
     }
 
@@ -77,7 +68,7 @@ pub struct Chela {
 }
 
 impl Chela {
-    pub fn new(entities: Vec<Box<dyn ToEntity>>) -> Self {
+    pub fn new(entities: Vec<Entity>) -> Self {
         let repositories = Vec::new(); //HashMap::new();
         let schema = Schema::new(entities);
 
