@@ -1,15 +1,14 @@
 // use chela_query::runner::QueryRunner;
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 use proc_macro_error::abort_call_site;
 use quote::{format_ident, quote, ToTokens};
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, parse_quote, DeriveInput, Lit, Meta, MetaNameValue, NestedMeta, Type,
+    parse_macro_input, parse_quote, DeriveInput, Lit, LitStr, Meta, MetaNameValue, NestedMeta, Type,
 };
 
-
 #[proc_macro_derive(ToEntity, attributes(has_many))]
-pub fn derive_signature(item: TokenStream) -> TokenStream {
+pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(item as DeriveInput);
     let struct_name = &ast.ident;
     let struct_name_str = syn::LitStr::new(&struct_name.to_string(), struct_name.span());
@@ -65,14 +64,8 @@ pub fn derive_signature(item: TokenStream) -> TokenStream {
                 let table_n_value = table_n.value();
                 let struct_name = table_to_struct_name(&table_n_value);
                 let struct_n = syn::LitStr::new(&struct_name.to_uppercase(), field.span());
-                has_many_vec.push(quote! {
-                        HasMany {
-                            foreign_key: #foreign_key.to_string(),
-                            struct_name: #struct_n.to_string(),
-                            table_name: #table_n.to_string(),
-                        }
-
-                })
+                let has_many = build_has_many(foreign_key.clone(), struct_n, table_n);
+                has_many_vec.push(has_many)
             }
         }
         let field_name: &syn::Ident = field.ident.as_ref().unwrap();
@@ -98,49 +91,42 @@ pub fn derive_signature(item: TokenStream) -> TokenStream {
     let repository = format_ident!("{}{}", struct_name, "Repository");
     let mut table_name = struct_name.to_string().to_lowercase();
     table_name.push('s');
-    let entity = quote! {Entity {
-        table_name: #table_name.to_string(),
-        struct_name: #struct_name_str.to_string(),
-        has_many: vec![
-            #(
-                #has_many_vec
-            ),*
-        ],
-        columns:
-        vec![
-            #( Column {
-                column_name: #keys.to_string(),
-                column_type: ColumnType::from(stringify!(#types).to_string()),
-            }
-            ),*
-        ]
-    }};
+    let preloads = build_preloads();
+    let has_many = build_has_many_vec(has_many_vec);
+    let columns = build_columns(keys, types);
+    let entity = build_entity(table_name, has_many, struct_name_str, columns);
+
     let expanded = quote! {
         impl ToEntity for #struct_name {
             fn to_entity()->Entity {
 
                 #entity
+                entity
             }
         }
 
         struct #repository {
             entity: Entity,
+            pub preloads: HashMap<String,QueryBuilder>
         }
 
         impl Repository for #repository {
-            fn entity(self) -> Entity{
-                self.entity
+            fn entity(&self) -> Entity{
+                self.entity.clone()
             }
-            fn as_any(&self) -> &dyn Any{
-                self
-            }
+            // fn as_any(&self) -> &dyn Any{
+            //     self
+            // }
 
         }
 
         impl #repository {
             pub fn new() -> #repository {
+               #entity
+               #preloads
                 #repository {
-                   entity: #entity,
+                   entity: entity,
+                   preloads: preloads
                }
             }
 
@@ -199,36 +185,69 @@ pub fn derive_signature(item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+fn build_columns(keys: Vec<TokenStream>, types: Vec<TokenStream>) -> TokenStream {
+    quote! {
+        vec![
+            #( Column {
+                column_name: #keys.to_string(),
+                column_type: ColumnType::from(stringify!(#types).to_string()),
+            }
+            ),*
+        ]
+    }
+}
+fn build_has_many_vec(has_many_vec: Vec<TokenStream>) -> TokenStream {
+    quote! {vec![
+        #(
+            #has_many_vec
+        ),*
+    ]}
+}
+
+fn build_has_many(foreign_key: Option<LitStr>, struct_n: LitStr, table_n: LitStr) -> TokenStream {
+    quote! {
+            HasMany {
+                foreign_key: #foreign_key.to_string(),
+                struct_name: #struct_n.to_string(),
+                table_name: #table_n.to_string(),
+            }
+
+    }
+}
+
+fn build_entity(
+    table_name: String,
+    has_many: TokenStream,
+    struct_name_str: LitStr,
+    columns: TokenStream,
+) -> TokenStream {
+    quote! {
+            let entity = Entity {
+            table_name: #table_name.to_string(),
+            struct_name: #struct_name_str.to_string(),
+            has_many: #has_many,
+            columns: #columns,
+            };
+    }
+}
+fn build_preloads() -> TokenStream {
+    quote! {
+            let tuples : Vec<(String,QueryBuilder)>= entity.has_many.iter().map(|has_many| {
+           (has_many.table_name.clone(),
+           QueryBuilder::new()
+           .select()
+           .from(has_many.table_name.clone().to_string())
+           .where_(has_many.foreign_key.to_string()) )
+        }).collect();
+        let preloads: HashMap<_, _> = tuples.into_iter().collect();
+    }
+}
+
 fn table_to_struct_name<'a>(table_n: &'a String) -> String {
     let first_letter = table_n[0..1].to_uppercase().to_string().to_owned();
     let struct_name: &str = &table_n[1..table_n.len() - 1];
     first_letter + struct_name
 }
-
-// #[proc_macro_derive(Repository)]
-// pub fn derive_signature2(_: TokenStream) -> TokenStream {
-//     let expanded = quote! {
-//         impl Repository for PointRepository {
-//             fn table_name(&self) -> &'static str{
-//                 self.table_name
-//             }
-//             fn as_any(&self) -> &dyn Any{
-//                 self
-//             }
-//         }
-
-//         impl PointRepository {
-//             pub fn new(table_name:&'static str) -> PointRepository {
-//                 PointRepository {
-//                    table_name: table_name,
-//                }
-//             }
-
-//         }
-//     };
-
-//     expanded.into()
-// }
 
 #[cfg(test)]
 mod tests {

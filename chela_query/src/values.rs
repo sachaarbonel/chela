@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::query::Expr;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq,Clone)]
 pub enum Value {
     SingleQuotedString(String),
     Number(String, bool),

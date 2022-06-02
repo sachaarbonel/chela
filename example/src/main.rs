@@ -7,6 +7,7 @@ use chela_query::builder::QueryBuilder;
 use chela_query::create::Column;
 use chela_query::create::ColumnType;
 use itertools::Itertools;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::{any::Any, rc::Rc}; //TODO: in query create an intermediate ColumnDef
                              // use chela_query::runner::QueryRunner;
@@ -16,8 +17,14 @@ use tokio_postgres::Client;
 struct User {
     id: i32,
     username: String,
-    #[has_many(foreign_key = "user_id",table_name = "orders")]
+    #[has_many(foreign_key = "user_id", table_name = "orders")]
     orders: Vec<Order>,
+}
+
+impl<'a> PreloadBuilder<'a> for UserRepository {
+    fn preload(&'a self, table_name: &'a str) -> &'a QueryBuilder {
+        &self.preloads[table_name]
+    }
 }
 
 #[derive(PartialEq, Clone)]
@@ -34,32 +41,18 @@ struct Order {
 }
 
 fn main() {
-    let user = User {
-        id: 1,
-        username: "origin".to_string(),
-        orders: todo!(),
-    };
-    let order = Order {
-        id: 1,
-        user_id: 1,
-        price: 100.0,
-    };
     let repository = UserRepository::new();
-    
+    let preload_query = repository
+        .preload("orders")
+        .clone()
+        .in_list(vec![1, 2, 3, 4])
+        .build();
+    println!("{}", preload_query.to_string());
 
-    // let pointRepo = PointRepository::new();
-    // let repos = vec![Box::new(pointRepo)];
-    // let repositories = vec![Box::new(repository)];
-    let mut chela = Chela::new(vec![User::to_entity(),Order::to_entity()]); //Schema::new(vec![Box::new(point)]);
+    let mut chela = Chela::new(vec![User::to_entity(), Order::to_entity()]); //Schema::new(vec![Box::new(point)]);
     println!("{}", chela.migrations());
-    // chela.add_repo(Rc::new(repository));
 }
 
-// async fn first_point(chela: Chela, pointRepository: ProductRepository, client: &Client) -> Product {
-//     let migrations = chela.migrations();
-//     let first_migration = migrations.run(client);
-//     // pointRepository.first(client).await
-// }
 
 // impl Point {
 //     pub fn repo(chela: Chela) -> &'static PointRepository {
@@ -75,35 +68,21 @@ fn main() {
 //     }
 // }
 
-struct Ids(Vec<i32>);
-
-impl Display for Ids {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        //comma separated list of ids
-        let ids = self
-            .0
-            .iter()
-            .map(|id| id.to_string())
-            .collect::<Vec<String>>();
-
-        write!(f, "{}", ids.join(","))
+impl Builder for UserRepository {
+    fn select(&self) -> QueryBuilder {
+        let query = QueryBuilder::new()
+            .select()
+            .from(self.entity.table_name.to_string());
+        query
     }
 }
 
 #[async_trait]
-impl QueryRunner for UserRepository
-where
-    User: ToEntity,
-{
+impl QueryRunner for UserRepository {
     type Output = User;
-    async fn list(self, client: &Client) -> Vec<Self::Output> {
+    async fn load(&self, client: &Client) -> Vec<Self::Output> {
         let entity = self.entity();
-        let parent_query = QueryBuilder::new()
-            .select()
-            .from(entity.table_name.to_string())
-            // .order_by(Some("id".to_string()))
-            // .limit(Some(1))
-            .build();
+        let parent_query = self.select().build();
 
         let parent_rows = client.query(&parent_query.to_string(), &[]).await.unwrap();
         let users_outer: Vec<UserOuter> = parent_rows
@@ -116,12 +95,12 @@ where
             .map(|user| (user, user.id))
             .collect::<Vec<_>>();
 
-        let many_row0_query = format!(
-            r#"SELECT * FROM {} WHERE {} IN ({});"#,
-            entity.has_many[0].table_name.to_string(),
-            entity.has_many[0].foreign_key.to_string(),
-            Ids(ids).to_string()
-        );
+        let many_row0_query = self
+            .preload(&entity.has_many[0].table_name.to_string())
+            .clone()
+            .in_list(ids)
+            .build(); 
+
         // let many_row0_query = QueryBuilder::new()
         //     .select()
         //     .from(entity.has_many[0].table_name.to_string())

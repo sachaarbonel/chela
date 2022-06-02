@@ -29,12 +29,14 @@ pub enum ColumnType {
     TimestampNoTz,
     UUID,
     UserDefined,
+    DoublePrecision
 }
 
 impl From<String> for ColumnType {
     fn from(s: String) -> Self {
         match s.as_str() {
             "i64" => ColumnType::Integer,
+            "f64"=> ColumnType::DoublePrecision,
             "bool" => ColumnType::Boolean,
             "String" => ColumnType::VARCHAR(150),
             "NaiveDate" => ColumnType::Date,
@@ -91,6 +93,7 @@ impl Display for ColumnType {
             ColumnType::UUID => write!(f, "UUID"),
             ColumnType::UserDefined => write!(f, "USER-DEFINED"),
             ColumnType::Boolean => write!(f, "boolean"),
+            ColumnType::DoublePrecision => write!(f, "DOUBLE PRECISION"),
         }
     }
 }

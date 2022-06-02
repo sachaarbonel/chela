@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{display::display_comma_separated, values::Value, values::Values};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SelectItem {
     Wildcard,
 }
@@ -26,13 +26,73 @@ pub enum SetExpr {
     Values(Values),
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct TableWithJoins {
+    pub relation: TableFactor,
+    // pub joins: Vec<Join>,
+}
+
+impl Display for TableWithJoins {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.relation).unwrap();
+        Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum TableFactor {
+    Table {
+        name: ObjectName,
+        // alias: Option<TableAlias>,
+        // Arguments of a table-valued function, as supported by Postgres
+        // and MSSQL. Note that deprecated MSSQL `FROM foo (NOLOCK)` syntax
+        // will also be parsed as `args`.
+        // args: Vec<FunctionArg>,
+        // MSSQL-specific `WITH (...)` hints such as NOLOCK.
+        // with_hints: Vec<Expr>,
+    },
+}
+
+impl Display for TableFactor {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TableFactor::Table { name, .. } => write!(f, "{}", name),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ObjectName(pub Vec<Ident>);
+
+impl Display for ObjectName {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", display_comma_separated(&self.0))
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Ident {
+    /// The value of the identifier without quotes.
+    pub value: String,
+    // The starting quote if any. Valid quote characters are the single quote,
+    // double quote, backtick, and opening square bracket.
+    // pub quote_style: Option<char>,
+}
+
+impl Display for Ident {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.value).unwrap();
+        Ok(())
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Select {
     // pub distinct: bool,
     /// projection expressions
     pub projection: Vec<SelectItem>,
     /// FROM
-    pub from: String, //Vec<TableWithJoins>,
+    pub from: Vec<TableWithJoins>, //
     /// WHERE
     pub selection: Option<Expr>,
     /// GROUP BY
@@ -43,9 +103,10 @@ pub struct Select {
     pub having: Option<Expr>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Value(Value),
+    Identifier(Ident),
     InList {
         expr: Box<Expr>,
         list: Vec<Expr>,
@@ -89,7 +150,7 @@ impl Display for Select {
             f,
             "SELECT {} FROM {}",
             display_comma_separated(&self.projection),
-            self.from
+            display_comma_separated(&self.from)
         )?;
         if let Some(selection) = &self.selection {
             write!(f, " WHERE {}", selection)?;
@@ -118,6 +179,7 @@ impl Display for Expr {
                 write!(f, "{} IN ({})", expr, display_comma_separated(list))
             }
             Expr::Value(value) => write!(f, "{}", value),
+            Expr::Identifier(value) => write!(f, "{}", value),
         }
     }
 }

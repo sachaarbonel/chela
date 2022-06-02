@@ -1,15 +1,22 @@
-use crate::{query::SelectItem, query::Expr, query::Select, query::SetExpr, query::QueryStmt};
+use crate::{
+    query::Expr,
+    query::QueryStmt,
+    query::SelectItem,
+    query::SetExpr,
+    query::{Ident, ObjectName, Select, TableFactor, TableWithJoins},
+    values::Value,
+};
 
-
-
+#[derive(Debug, Clone)]
 pub struct QueryBuilder {
     pub order_by: Option<String>,
+    pub r#where: Box<Expr>,
     pub limit: Option<i64>,
     // pub distinct: bool,
     /// projection expressions
     pub projection: Vec<SelectItem>,
     /// FROM
-    pub from: String, //Vec<TableWithJoins>,
+    pub from: Vec<TableWithJoins>, //Vec<TableWithJoins>,
     /// WHERE
     pub selection: Option<Expr>,
     /// GROUP BY
@@ -21,31 +28,52 @@ pub struct QueryBuilder {
 }
 
 impl QueryBuilder {
-   pub fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             order_by: None,
             limit: None,
+            r#where: Box::new(Expr::Identifier(Ident {
+                value: "".to_string(),
+            })),
             projection: Vec::new(),
-            from: String::new(),
+            from: Vec::new(),
             selection: None,
             group_by: None,
             sort_by: Vec::new(),
             having: None,
         }
     }
-    pub  fn select(mut self) -> QueryBuilder {
+    pub fn select(mut self) -> QueryBuilder {
         //projection: Vec<SelectItem>
         self.projection = vec![SelectItem::Wildcard];
         self
     }
 
     pub fn from(mut self, from: String) -> QueryBuilder {
-        self.from = from;
+        self.from = vec![TableWithJoins {
+            relation: TableFactor::Table {
+                name: ObjectName(vec![Ident { value: from }]),
+            },
+        }];
         self
     }
 
-    pub fn r#where(mut self, selection: Option<Expr>) -> QueryBuilder {
-        self.selection = selection;
+    pub fn in_list(mut self, list_of_ids: Vec<i32>) -> QueryBuilder {
+        let expr_value = list_of_ids
+            .into_iter()
+            .map(|value| Expr::Value(Value::Number(value.to_string(), false)))
+            .collect::<Vec<Expr>>();
+        self.selection = Some(Expr::InList {
+            expr: self.r#where.clone(),
+            list: expr_value,
+
+            negated: false,
+        });
+        self
+    }
+
+    pub fn where_(mut self, id: String) -> QueryBuilder {
+        self.r#where = Box::new(Expr::Identifier(Ident { value: id }));
         self
     }
 
