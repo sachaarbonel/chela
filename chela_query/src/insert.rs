@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::{create::Column, display::display_comma_separated, query::QueryStmt};
+use crate::{
+    display::display_comma_separated,
+    query::{Ident, QueryStmt},
+};
 
 #[derive(Debug, PartialEq)]
 pub struct InsertStmt {
@@ -11,7 +14,7 @@ pub struct InsertStmt {
     /// TABLE
     pub table_name: String,
     /// COLUMNS
-    pub columns: Vec<Column>, //Vec<Ident>,
+    pub columns: Vec<Ident>, //Vec<Ident>,
     /// Overwrite (Hive)
     // pub overwrite: bool,
     // A SQL query that specifies what to insert

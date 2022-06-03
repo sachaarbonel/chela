@@ -9,7 +9,11 @@ pub mod values;
 #[cfg(test)]
 mod tests {
     use crate::{
-        builder::QueryBuilder,
+        builder::{
+            not_null, primary_key_unique, serial, table, varchar, ColumnOptionDefBuilder,
+            CreateBuilder, DataTypeBuilder, QueryBuilder,
+        },
+        create::{ColumnDef, ColumnOption, ColumnOptionDef, CreateStmt, DataType},
         insert::InsertStmt,
         query::QueryStmt,
         query::{Expr, Select},
@@ -17,6 +21,55 @@ mod tests {
         query::{SetExpr, TableFactor},
         values::{Value, Values},
     };
+
+    #[test]
+    fn create_table_test() {
+        let query = create_stmt();
+        let builder = table("alphabet".to_string())
+            .column("id".to_string(), serial(), primary_key_unique())
+            .column("letter".to_string(), varchar(None), not_null());
+
+        assert_eq!(builder.build(), query);
+
+        assert_eq!(
+            query.to_string(),
+            "CREATE TABLE alphabet (id SERIAL PRIMARY KEY, letter VARCHAR NOT NULL)"
+        );
+    }
+
+    fn create_stmt() -> CreateStmt {
+        CreateStmt {
+            name: ObjectName(vec![Ident {
+                value: "alphabet".to_string(),
+            }]),
+            columns: vec![
+                ColumnDef {
+                    name: Ident {
+                        value: "id".to_string(),
+                    },
+                    data_type: DataType::Custom(ObjectName(vec![Ident {
+                        value: "SERIAL".to_string(),
+                    }])),
+                    options: vec![ColumnOptionDef {
+                        name: None,
+                        option: ColumnOption::Unique { is_primary: true },
+                    }],
+                },
+                ColumnDef {
+                    name: Ident {
+                        value: "letter".to_string(),
+                    },
+                    data_type: DataType::Varchar(None),
+                    options: vec![ColumnOptionDef {
+                        name: None,
+                        option: ColumnOption::NotNull,
+                    }],
+                },
+            ],
+            // primary_key: Some(vec![Ident{value: "id".to_string()}]),
+            // ..Default::default()
+        }
+    }
 
     #[test]
     fn insert_test() {

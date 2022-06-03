@@ -1,7 +1,7 @@
 pub mod migrator;
 pub use chela_derive::*;
 use chela_query::builder::QueryBuilder;
-use chela_query::create::Column;
+use chela_query::create::{ColumnDef, ColumnOptionDef, DataType};
 use chela_query::statement::Statement;
 use futures::future::join_all;
 use migrator::{Migrations, Migrator};
@@ -42,6 +42,14 @@ pub struct Entity {
     pub has_many: Vec<HasMany>,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct Column {
+    pub name: String,
+    pub data_type: DataType,
+    // pub collation: Option<ObjectName>,
+    pub options: Vec<ColumnOptionDef>,
+}
+
 #[derive(Debug, Clone)]
 pub struct HasMany {
     pub foreign_key: String,
@@ -55,14 +63,7 @@ pub struct Schema {
 
 impl Schema {
     pub fn new(entities: Vec<Entity>) -> Self {
-        // let concrete_entities: Vec<Entity> = entities
-        //     .into_iter()
-        //     .map(|entity| entity.to_entity())
-        //     .collect();
-
-        Schema {
-            entities, //: concrete_entities,
-        }
+        Schema { entities }
     }
 
     pub fn entities(self) -> Vec<Entity> {

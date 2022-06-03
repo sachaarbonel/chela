@@ -1,4 +1,5 @@
 use crate::{
+    create::{ColumnDef, ColumnOption, ColumnOptionDef, CreateStmt, DataType},
     query::Expr,
     query::QueryStmt,
     query::SelectItem,
@@ -7,6 +8,159 @@ use crate::{
     values::Value,
 };
 
+#[derive(Debug, Clone)]
+pub struct CreateBuilder {
+    // or_replace: bool,
+    // temporary: bool,
+    // external: bool,
+    // global: Option<bool>,
+    // if_not_exists: bool,
+    /// Table name
+    pub name: ObjectName,
+    /// Optional schema
+    pub columns: Vec<ColumnDef>,
+}
+
+///Short hand for CreateBuilder::new().name(name)
+pub fn table(name: String) -> CreateBuilder {
+    CreateBuilder::new().name(name)
+}
+
+impl CreateBuilder {
+    pub fn new() -> Self {
+        CreateBuilder {
+            // or_replace: false,
+            // temporary: false,
+            // external: false,
+            // global: None,
+            // if_not_exists: false,
+            name: ObjectName(vec![]),
+            columns: vec![],
+        }
+    }
+
+    // pub fn from_vec(name: String, columns: Vec<ColumnDef>) -> CreateBuilder {
+    //     let builder = CreateBuilder::new().name(name);
+    //     columns.iter().for_each(|column| {
+    //         builder.clone().column(
+    //             column.name.value.clone(),
+    //             column.data_type.clone(),
+    //             column.options.clone(),
+    //         );
+    //     });
+    //     builder
+    // }
+
+    pub fn name(mut self, name: String) -> CreateBuilder {
+        self.name = ObjectName(vec![Ident { value: name }]);
+        self
+    }
+
+    pub fn column(
+        mut self,
+        name: String,
+        data_type: DataType,
+        options_builder: Vec<ColumnOptionDef>,
+    ) -> CreateBuilder {
+        self.columns.push(ColumnDef {
+            name: Ident { value: name },
+            data_type: data_type,
+            options: options_builder,
+        });
+        self
+    }
+
+    pub fn build(self) -> CreateStmt {
+        CreateStmt {
+            name: self.name,
+            columns: self.columns,
+        }
+    }
+}
+
+pub struct DataTypeBuilder {
+    data_type: DataType,
+}
+
+impl DataTypeBuilder {
+    pub fn new() -> Self {
+        DataTypeBuilder {
+            data_type: DataType::Custom(ObjectName(vec![])),
+        }
+    }
+
+    pub fn varchar(mut self, length: Option<u64>) -> DataTypeBuilder {
+        self.data_type = DataType::Varchar(length);
+        self
+    }
+
+    pub fn serial(mut self) -> DataTypeBuilder {
+        self.data_type = DataType::Custom(ObjectName(vec![Ident {
+            value: "SERIAL".to_string(),
+        }]));
+        self
+    }
+
+    pub fn build(self) -> DataType {
+        self.data_type
+    }
+}
+
+///Short hand for DataTypeBuilder::new().varchar(length)
+pub fn varchar(length: Option<u64>) -> DataType {
+    DataTypeBuilder::new().varchar(length).build()
+}
+
+pub fn serial() -> DataType {
+    DataTypeBuilder::new().serial().build()
+}
+pub struct ColumnOptionDefBuilder {
+    options: Vec<ColumnOptionDef>,
+}
+
+impl ColumnOptionDefBuilder {
+    pub fn new() -> Self {
+        ColumnOptionDefBuilder { options: vec![] }
+    }
+
+    pub fn option(mut self, name: String, option: ColumnOption) -> ColumnOptionDefBuilder {
+        self.options.push(ColumnOptionDef {
+            name: Some(Ident { value: name }),
+            option: option,
+        });
+
+        self
+    }
+
+    pub fn primary_key_unique(mut self) -> ColumnOptionDefBuilder {
+        self.options.push(ColumnOptionDef {
+            name: None,
+            option: ColumnOption::Unique { is_primary: true },
+        });
+
+        self
+    }
+
+    pub fn not_null(mut self) -> ColumnOptionDefBuilder {
+        self.options.push(ColumnOptionDef {
+            name: None,
+            option: ColumnOption::NotNull,
+        });
+
+        self
+    }
+
+    pub fn build(self) -> Vec<ColumnOptionDef> {
+        self.options
+    }
+}
+
+pub fn not_null() -> Vec<ColumnOptionDef> {
+    ColumnOptionDefBuilder::new().not_null().build()
+}
+pub fn primary_key_unique() -> Vec<ColumnOptionDef> {
+    ColumnOptionDefBuilder::new().primary_key_unique().build()
+}
 #[derive(Debug, Clone)]
 pub struct QueryBuilder {
     pub order_by: Option<String>,

@@ -4,10 +4,11 @@ use proc_macro_error::abort_call_site;
 use quote::{format_ident, quote, ToTokens};
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, parse_quote, DeriveInput, Lit, LitStr, Meta, MetaNameValue, NestedMeta, Type,
+    parse_macro_input, parse_quote, DeriveInput, Ident, Lit, LitStr, Meta, MetaNameValue,
+    NestedMeta, Type,
 };
 
-#[proc_macro_derive(ToEntity, attributes(has_many))]
+#[proc_macro_derive(ToEntity, attributes(has_many, primary_key))]
 pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(item as DeriveInput);
     let struct_name = &ast.ident;
@@ -22,68 +23,39 @@ pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
         panic!("Only support Struct")
     };
 
-    let mut keys = Vec::new();
-    let mut idents = Vec::new();
-    let mut types = Vec::new();
+    let mut keys: Vec<TokenStream> = Vec::new();
+
     let mut has_many_vec = Vec::new();
+    let mut column_vec = Vec::new();
     let mut foreign_key = None;
+    // let mut uuid = None;
     let mut table_name = None;
     for field in fields.named.iter() {
-        for attribute in field
-            .attrs
-            .iter()
-            .filter(|attribute| attribute.path.is_ident("has_many"))
-        {
-            let meta: Meta = attribute.parse_meta().unwrap(); //.unwrap_or_abort();
+        parse_has_many(field, &mut foreign_key, &mut table_name, &mut has_many_vec);
 
-            const VALID_FORMAT: &str = r#"Expected `#[has_many(foreign_key="foreign_key_name", table_name="your table name")]`"#;
-            if let Meta::List(meta) = meta {
-                for meta in meta.nested {
-                    if let NestedMeta::Meta(meta) = meta {
-                        match meta {
-                            Meta::NameValue(MetaNameValue { path, lit, .. }) => match (
-                                path.get_ident()
-                                    .unwrap_or_else(|| abort_call_site!(VALID_FORMAT))
-                                    .to_string()
-                                    .as_str(),
-                                lit,
-                            ) {
-                                ("foreign_key", Lit::Str(lit)) => foreign_key = Some(lit),
-                                ("table_name", Lit::Str(lit)) => table_name = Some(lit),
-                                _ => abort_call_site!(VALID_FORMAT),
-                            },
-
-                            _ => abort_call_site!(VALID_FORMAT),
-                        }
-                    } else {
-                        abort_call_site!(VALID_FORMAT);
-                    }
-                }
-            }
-            if let Some(table_n) = table_name.clone() {
-                let table_n_value = table_n.value();
-                let struct_name = table_to_struct_name(&table_n_value);
-                let struct_n = syn::LitStr::new(&struct_name.to_uppercase(), field.span());
-                let has_many = build_has_many(foreign_key.clone(), struct_n, table_n);
-                has_many_vec.push(has_many)
-            }
-        }
         let field_name: &syn::Ident = field.ident.as_ref().unwrap();
         let name: String = field_name.to_string();
 
         let literal_key_str = syn::LitStr::new(&name, field.span());
         let type_name = &field.ty;
-        let type_is_vec = if let Type::Path(ref p) = field.ty {
-            p.path.segments.iter().next().unwrap().ident.to_string() == "Vec"
-        } else {
-            false
-        };
-        if !type_is_vec {
-            keys.push(quote! { #literal_key_str });
+        let mut type_is_vec = false;
+        let key = quote! { #literal_key_str };
+        let ty = type_name.to_token_stream();
+        parse_type_is_vec(field, &mut type_is_vec);
+        parse_primary_key(
+            field,
+            &mut column_vec,
+            key.clone(),
+            ty.clone(),
+            &mut type_is_vec,
+        );
 
-            idents.push(&field.ident);
-            types.push(type_name.to_token_stream());
-        }
+        // if !type_is_vec {
+        //     keys.push(key);
+
+        //     idents.push(&field.ident);
+        //     types.push(ty);
+        // }
     }
 
     // let has_many_tokens = (0..has_many_vec.len()).map(syn::Index::from);
@@ -92,8 +64,9 @@ pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
     let mut table_name = struct_name.to_string().to_lowercase();
     table_name.push('s');
     let preloads = build_preloads();
-    let has_many = build_has_many_vec(has_many_vec);
-    let columns = build_columns(keys, types);
+    let has_many = build_vec(has_many_vec);
+    let columns = build_vec(column_vec);
+
     let entity = build_entity(table_name, has_many, struct_name_str, columns);
 
     let expanded = quote! {
@@ -185,18 +158,136 @@ pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
     expanded.into()
 }
 
-fn build_columns(keys: Vec<TokenStream>, types: Vec<TokenStream>) -> TokenStream {
-    quote! {
-        vec![
-            #( Column {
-                column_name: #keys.to_string(),
-                column_type: ColumnType::from(stringify!(#types).to_string()),
-            }
-            ),*
-        ]
+fn parse_type_is_vec(field: &syn::Field, type_is_vec: &mut bool) {
+    if let Type::Path(ref p) = field.ty {
+        *type_is_vec = p.path.segments.iter().next().unwrap().ident.to_string() == "Vec"
+    } else {
+        *type_is_vec = false;
     }
 }
-fn build_has_many_vec(has_many_vec: Vec<TokenStream>) -> TokenStream {
+
+fn parse_primary_key(
+    field: &syn::Field,
+    columns: &mut Vec<TokenStream>,
+    key: TokenStream,
+    ty: TokenStream,
+    type_is_vec: &mut bool,
+) {
+    let mut auto_increment = false;
+    for attribute in field
+        .attrs
+        .iter()
+        .filter(|attribute| attribute.path.is_ident("primary_key"))
+    {
+        let meta: Meta = attribute.parse_meta().unwrap(); //.unwrap_or_abort();
+
+        const VALID_FORMAT: &str = r#"Expected `#[primary_key(auto_increment=true)]`"#;
+        if let Meta::List(meta) = meta {
+            for meta in meta.nested {
+                if let NestedMeta::Meta(meta) = meta {
+                    match meta {
+                        Meta::NameValue(MetaNameValue { path, lit, .. }) => match (
+                            path.get_ident()
+                                .unwrap_or_else(|| abort_call_site!(VALID_FORMAT))
+                                .to_string()
+                                .as_str(),
+                            lit,
+                        ) {
+                            ("auto_increment", Lit::Bool(lit)) => auto_increment = lit.value,
+                            // ("uuid", Lit::Str(lit)) => uuid = Some(lit),
+                            _ => abort_call_site!(VALID_FORMAT),
+                        },
+
+                        _ => abort_call_site!(VALID_FORMAT),
+                    }
+                } else {
+                    abort_call_site!(VALID_FORMAT);
+                }
+            }
+        }
+    }
+    if auto_increment {
+        let column_primary_key_auto_increment =
+            build_column_primary_key_auto_increment(key.clone());
+        columns.push(column_primary_key_auto_increment);
+    } else {
+        if !*type_is_vec {
+            let column = build_column_not_null(key.clone(), ty.clone());
+            columns.push(column);
+        }
+    }
+}
+
+fn parse_has_many(
+    field: &syn::Field,
+    foreign_key: &mut Option<LitStr>,
+    table_name: &mut Option<LitStr>,
+    has_many_vec: &mut Vec<TokenStream>,
+) {
+    for attribute in field
+        .attrs
+        .iter()
+        .filter(|attribute| attribute.path.is_ident("has_many"))
+    {
+        let meta: Meta = attribute.parse_meta().unwrap(); //.unwrap_or_abort();
+
+        const VALID_FORMAT: &str = r#"Expected `#[has_many(foreign_key="foreign_key_name", table_name="your table name")]`"#;
+        if let Meta::List(meta) = meta {
+            for meta in meta.nested {
+                if let NestedMeta::Meta(meta) = meta {
+                    match meta {
+                        Meta::NameValue(MetaNameValue { path, lit, .. }) => match (
+                            path.get_ident()
+                                .unwrap_or_else(|| abort_call_site!(VALID_FORMAT))
+                                .to_string()
+                                .as_str(),
+                            lit,
+                        ) {
+                            ("foreign_key", Lit::Str(lit)) => *foreign_key = Some(lit),
+                            ("table_name", Lit::Str(lit)) => *table_name = Some(lit),
+                            _ => abort_call_site!(VALID_FORMAT),
+                        },
+
+                        _ => abort_call_site!(VALID_FORMAT),
+                    }
+                } else {
+                    abort_call_site!(VALID_FORMAT);
+                }
+            }
+        }
+        if let Some(table_n) = table_name.clone() {
+            let table_n_value = table_n.value();
+            let struct_name = table_to_struct_name(&table_n_value);
+            let struct_n = syn::LitStr::new(&struct_name, field.span());
+            let has_many = build_has_many(foreign_key.clone(), struct_n, table_n);
+            has_many_vec.push(has_many)
+        }
+    }
+}
+
+fn build_column_primary_key_auto_increment(key: TokenStream) -> TokenStream {
+    let data_type = quote! { serial() };
+    let options = quote! {primary_key_unique()};
+    build_column(key, data_type, options)
+}
+
+fn build_column(key: TokenStream, data_type: TokenStream, options: TokenStream) -> TokenStream {
+    quote! {
+        Column {
+            name: #key.to_string(),
+            data_type: #data_type,
+            options: #options
+        }
+    }
+}
+
+fn build_column_not_null(key: TokenStream, data_type: TokenStream) -> TokenStream {
+    let d = quote! { DataType::from(stringify!(#data_type).to_string()) };
+    let options = quote! {not_null()};
+    build_column(key, d, options)
+}
+
+fn build_vec(has_many_vec: Vec<TokenStream>) -> TokenStream {
     quote! {vec![
         #(
             #has_many_vec

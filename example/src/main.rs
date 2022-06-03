@@ -3,18 +3,21 @@ use async_trait::async_trait;
 // use chela::Entity;
 // use chela::Schema;
 use chela::{migrator::MigrationRunner, *};
-use chela_query::builder::QueryBuilder;
-use chela_query::create::Column;
-use chela_query::create::ColumnType;
+use chela_query::builder::{not_null, primary_key_unique, serial, QueryBuilder};
+use chela_query::*;
+// use chela_query::create::Column;
+// use chela_query::create::ColumnType;
+use chela_query::create::DataType;
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::{any::Any, rc::Rc}; //TODO: in query create an intermediate ColumnDef
                              // use chela_query::runner::QueryRunner;
+                             // use chela_query::DataType;
 use tokio_postgres::Client;
-
 #[derive(ToEntity, PartialEq, Debug)]
 struct User {
+    #[primary_key(auto_increment = true)]
     id: i32,
     username: String,
     #[has_many(foreign_key = "user_id", table_name = "orders")]
@@ -52,7 +55,6 @@ fn main() {
     let mut chela = Chela::new(vec![User::to_entity(), Order::to_entity()]); //Schema::new(vec![Box::new(point)]);
     println!("{}", chela.migrations());
 }
-
 
 // impl Point {
 //     pub fn repo(chela: Chela) -> &'static PointRepository {
@@ -99,7 +101,7 @@ impl QueryRunner for UserRepository {
             .preload(&entity.has_many[0].table_name.to_string())
             .clone()
             .in_list(ids)
-            .build(); 
+            .build();
 
         // let many_row0_query = QueryBuilder::new()
         //     .select()
