@@ -1,5 +1,5 @@
 use crate::{
-    create::{ColumnDef, ColumnOption, ColumnOptionDef, CreateStmt, DataType},
+    create::{ColumnDef, ColumnOption, ColumnOptionDef, CreateStmt, DataType, TableConstraint},
     query::Expr,
     query::QueryStmt,
     query::SelectItem,
@@ -19,15 +19,21 @@ pub struct CreateBuilder {
     pub name: ObjectName,
     /// Optional schema
     pub columns: Vec<ColumnDef>,
+
+    pub constraints: Vec<TableConstraint>,
 }
 
 ///Short hand for CreateBuilder::new().name(name)
-pub fn table(name: String) -> CreateBuilder {
-    CreateBuilder::new().name(name)
+pub fn create_table(name: String, columns: Vec<ColumnDef>) -> CreateBuilder {
+    CreateBuilder::new(columns).name(name)
+}
+
+pub fn select_table(name: String) -> QueryBuilder {
+    QueryBuilder::new().select().from(name)
 }
 
 impl CreateBuilder {
-    pub fn new() -> Self {
+    pub fn new(columns: Vec<ColumnDef>) -> Self {
         CreateBuilder {
             // or_replace: false,
             // temporary: false,
@@ -35,22 +41,35 @@ impl CreateBuilder {
             // global: None,
             // if_not_exists: false,
             name: ObjectName(vec![]),
-            columns: vec![],
+            columns: columns,
+            constraints: vec![],
         }
     }
 
-    // pub fn from_vec(name: String, columns: Vec<ColumnDef>) -> CreateBuilder {
-    //     let builder = CreateBuilder::new().name(name);
-    //     columns.iter().for_each(|column| {
-    //         builder.clone().column(
-    //             column.name.value.clone(),
-    //             column.data_type.clone(),
-    //             column.options.clone(),
-    //         );
-    //     });
-    //     builder
-    // }
 
+    pub fn foreign_key_constraint(
+        mut self,
+        constraint_name: String,
+        column_name: String,
+        foreign_table_name: String,
+        referred_column_name: String,
+    ) -> CreateBuilder {
+        self.constraints.push(TableConstraint::ForeignKey {
+            name: Some(Ident {
+                value: constraint_name,
+            }),
+            columns: vec![Ident { value: column_name }],
+            foreign_table: ObjectName(vec![Ident {
+                value: foreign_table_name,
+            }]),
+            referred_columns: vec![Ident {
+                value: referred_column_name,
+            }],
+            // on_delete: None,
+            // on_update: None,
+        });
+        self
+    }
     pub fn name(mut self, name: String) -> CreateBuilder {
         self.name = ObjectName(vec![Ident { value: name }]);
         self
@@ -70,10 +89,20 @@ impl CreateBuilder {
         self
     }
 
+    pub fn columns(self, tuple: Vec<(String, DataType, Vec<ColumnOptionDef>)>) -> CreateBuilder {
+        tuple
+            .into_iter()
+            .for_each(|(name, data_type, options_builder)| {
+                self.clone().column(name, data_type, options_builder);
+            });
+        self
+    }
+
     pub fn build(self) -> CreateStmt {
         CreateStmt {
             name: self.name,
             columns: self.columns,
+            constraints: self.constraints,
         }
     }
 }
@@ -94,6 +123,11 @@ impl DataTypeBuilder {
         self
     }
 
+    pub fn int(mut self, length: Option<u64>) -> DataTypeBuilder {
+        self.data_type = DataType::Int(length);
+        self
+    }
+
     pub fn serial(mut self) -> DataTypeBuilder {
         self.data_type = DataType::Custom(ObjectName(vec![Ident {
             value: "SERIAL".to_string(),
@@ -109,6 +143,9 @@ impl DataTypeBuilder {
 ///Short hand for DataTypeBuilder::new().varchar(length)
 pub fn varchar(length: Option<u64>) -> DataType {
     DataTypeBuilder::new().varchar(length).build()
+}
+pub fn int(length: Option<u64>) -> DataType {
+    DataTypeBuilder::new().int(length).build()
 }
 
 pub fn serial() -> DataType {

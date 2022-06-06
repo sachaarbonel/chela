@@ -40,6 +40,17 @@ pub struct Entity {
     pub struct_name: String, // the struct to be parse, like the User struct above.
     pub columns: Vec<Column>, // the struct's fields
     pub has_many: Vec<HasMany>,
+    pub belongs_to: Vec<BelongsTo>,
+}
+
+impl Entity {
+    fn has_many(self) -> bool {
+        !self.has_many.is_empty()
+    }
+
+    fn belongs_to(&self) -> bool {
+        !self.belongs_to.is_empty()
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -56,6 +67,21 @@ pub struct HasMany {
     pub struct_name: String,
     pub table_name: String,
 }
+
+#[derive(Debug, Clone)]
+pub struct BelongsTo {
+    pub constraint_name: String,
+    pub column_name: String,
+    pub foreign_key: String,
+    pub struct_name: String,
+    pub table_name: String,
+
+    //     "fk_user".to_string(),//constraint_name
+//     "user_id".to_string(),//column
+//     "users".to_string(),//foreign_table
+//     "id".to_string(),//referred_column
+}
+
 #[derive(Clone)]
 pub struct Schema {
     entities: Vec<Entity>,

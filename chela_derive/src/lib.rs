@@ -8,7 +8,7 @@ use syn::{
     NestedMeta, Type,
 };
 
-#[proc_macro_derive(ToEntity, attributes(has_many, primary_key))]
+#[proc_macro_derive(ToEntity, attributes(has_many, primary_key, belongs_to))]
 pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(item as DeriveInput);
     let struct_name = &ast.ident;
@@ -25,13 +25,21 @@ pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
 
     let mut keys: Vec<TokenStream> = Vec::new();
 
+    let mut belongs_to_vec = Vec::new();
     let mut has_many_vec = Vec::new();
     let mut column_vec = Vec::new();
-    let mut foreign_key = None;
+    let mut has_many_foreign_key = None;
+    let mut belongs_to_foreign_key = None;
     // let mut uuid = None;
-    let mut table_name = None;
+    let mut has_many_table_name = None;
+    let mut belongs_to_table_name = None;
     for field in fields.named.iter() {
-        parse_has_many(field, &mut foreign_key, &mut table_name, &mut has_many_vec);
+        parse_has_many(
+            field,
+            &mut has_many_foreign_key,
+            &mut has_many_table_name,
+            &mut has_many_vec,
+        );
 
         let field_name: &syn::Ident = field.ident.as_ref().unwrap();
         let name: String = field_name.to_string();
@@ -41,6 +49,15 @@ pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
         let mut type_is_vec = false;
         let key = quote! { #literal_key_str };
         let ty = type_name.to_token_stream();
+        parse_belongs_to(
+            field,
+            &mut belongs_to_foreign_key,
+            &mut belongs_to_table_name,
+            &mut belongs_to_vec,
+            key.clone(),
+            ty.clone(),
+            // &mut column_vec,
+        );
         parse_type_is_vec(field, &mut type_is_vec);
         parse_primary_key(
             field,
@@ -65,9 +82,10 @@ pub fn derive_signature(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
     table_name.push('s');
     let preloads = build_preloads();
     let has_many = build_vec(has_many_vec);
+    let belongs_to = build_vec(belongs_to_vec);
     let columns = build_vec(column_vec);
 
-    let entity = build_entity(table_name, has_many, struct_name_str, columns);
+    let entity = build_entity(table_name, has_many, belongs_to, struct_name_str, columns);
 
     let expanded = quote! {
         impl ToEntity for #struct_name {
@@ -265,6 +283,66 @@ fn parse_has_many(
     }
 }
 
+fn parse_belongs_to(
+    field: &syn::Field,
+    belongs_to_foreign_key: &mut Option<LitStr>,
+    belongs_to_table_name: &mut Option<LitStr>,
+    belongs_to_vec: &mut Vec<TokenStream>,
+    key: TokenStream,
+    ty: TokenStream,
+    // columns: &mut Vec<TokenStream>,
+) {
+    for attribute in field
+        .attrs
+        .iter()
+        .filter(|attribute| attribute.path.is_ident("belongs_to"))
+    {
+        let meta: Meta = attribute.parse_meta().unwrap(); //.unwrap_or_abort();
+
+        const VALID_FORMAT: &str = r#"Expected `#[belongs_to(foreign_key="foreign_key_name", table_name="your table name")]`"#;
+        if let Meta::List(meta) = meta {
+            for meta in meta.nested {
+                if let NestedMeta::Meta(meta) = meta {
+                    match meta {
+                        Meta::NameValue(MetaNameValue { path, lit, .. }) => match (
+                            path.get_ident()
+                                .unwrap_or_else(|| abort_call_site!(VALID_FORMAT))
+                                .to_string()
+                                .as_str(),
+                            lit,
+                        ) {
+                            ("foreign_key", Lit::Str(lit)) => *belongs_to_foreign_key = Some(lit),
+                            ("table_name", Lit::Str(lit)) => *belongs_to_table_name = Some(lit),
+                            _ => abort_call_site!(VALID_FORMAT),
+                        },
+
+                        _ => abort_call_site!(VALID_FORMAT),
+                    }
+                } else {
+                    abort_call_site!(VALID_FORMAT);
+                }
+            }
+        }
+        if let Some(table_n) = belongs_to_table_name.clone() {
+            let table_n_value = table_n.value();
+            let struct_name = table_to_struct_name(&table_n_value);
+            let struct_n = syn::LitStr::new(&struct_name, field.span());
+            let constraint_name = table_to_constraint_name(&table_n_value);
+            let constraint_n = syn::LitStr::new(&constraint_name, field.span());
+            let belongs_to = build_belongs_to(
+                belongs_to_foreign_key.clone(),
+                struct_n,
+                table_n,
+                key.clone(),
+                constraint_n,
+            );
+            belongs_to_vec.push(belongs_to);
+            // let column = build_column_not_null(key.clone(), ty.clone());
+            // columns.push(column);
+        }
+    }
+}
+
 fn build_column_primary_key_auto_increment(key: TokenStream) -> TokenStream {
     let data_type = quote! { serial() };
     let options = quote! {primary_key_unique()};
@@ -287,10 +365,10 @@ fn build_column_not_null(key: TokenStream, data_type: TokenStream) -> TokenStrea
     build_column(key, d, options)
 }
 
-fn build_vec(has_many_vec: Vec<TokenStream>) -> TokenStream {
+fn build_vec(vec: Vec<TokenStream>) -> TokenStream {
     quote! {vec![
         #(
-            #has_many_vec
+            #vec
         ),*
     ]}
 }
@@ -306,9 +384,29 @@ fn build_has_many(foreign_key: Option<LitStr>, struct_n: LitStr, table_n: LitStr
     }
 }
 
+fn build_belongs_to(
+    foreign_key: Option<LitStr>,
+    struct_n: LitStr,
+    table_n: LitStr,
+    column_name: TokenStream,
+    constraint_name: LitStr,
+) -> TokenStream {
+    quote! {
+            BelongsTo {
+                constraint_name: #constraint_name.to_string(),
+                column_name: #column_name.to_string(),
+                foreign_key: #foreign_key.to_string(),
+                struct_name: #struct_n.to_string(),
+                table_name: #table_n.to_string(),
+            }
+
+    }
+}
+
 fn build_entity(
     table_name: String,
     has_many: TokenStream,
+    belongs_to: TokenStream,
     struct_name_str: LitStr,
     columns: TokenStream,
 ) -> TokenStream {
@@ -316,6 +414,7 @@ fn build_entity(
             let entity = Entity {
             table_name: #table_name.to_string(),
             struct_name: #struct_name_str.to_string(),
+            belongs_to: #belongs_to,
             has_many: #has_many,
             columns: #columns,
             };
@@ -325,9 +424,7 @@ fn build_preloads() -> TokenStream {
     quote! {
             let tuples : Vec<(String,QueryBuilder)>= entity.has_many.iter().map(|has_many| {
            (has_many.table_name.clone(),
-           QueryBuilder::new()
-           .select()
-           .from(has_many.table_name.clone().to_string())
+           select_table(has_many.table_name.clone().to_string())
            .where_(has_many.foreign_key.to_string()) )
         }).collect();
         let preloads: HashMap<_, _> = tuples.into_iter().collect();
@@ -340,14 +437,26 @@ fn table_to_struct_name<'a>(table_n: &'a String) -> String {
     first_letter + struct_name
 }
 
+fn table_to_constraint_name<'a>(table_n: &'a String) -> String {
+    let struct_name: &str = &table_n[0..table_n.len() - 1];
+    String::from("fk_") + struct_name
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::table_to_struct_name;
+    use crate::{table_to_struct_name, table_to_constraint_name};
 
     #[test]
-    fn it_works() {
+    fn table_to_struct_name_test() {
         let user_string = "users".to_string();
         let struct_name = table_to_struct_name(&user_string);
         assert_eq!(struct_name, "User");
+    }
+
+    #[test]
+    fn table_to_constraint_name_test() {
+        let user_string = "users".to_string();
+        let struct_name = table_to_constraint_name(&user_string);
+        assert_eq!(struct_name, "fk_user");
     }
 }

@@ -8,10 +8,12 @@ pub mod values;
 
 #[cfg(test)]
 mod tests {
+    use crate::builder::int;
+    use crate::create::TableConstraint::ForeignKey;
     use crate::{
         builder::{
-            not_null, primary_key_unique, serial, table, varchar, ColumnOptionDefBuilder,
-            CreateBuilder, DataTypeBuilder, QueryBuilder,
+            create_table, not_null, primary_key_unique, select_table, serial, varchar,
+            ColumnOptionDefBuilder, CreateBuilder, DataTypeBuilder, QueryBuilder,
         },
         create::{ColumnDef, ColumnOption, ColumnOptionDef, CreateStmt, DataType},
         insert::InsertStmt,
@@ -23,9 +25,78 @@ mod tests {
     };
 
     #[test]
+    fn create_table_fkey_test() {
+        let query = create_fkey_stmt();
+        assert_eq!(
+            query,
+            create_table("article".to_string(), vec![])
+                .column("id".to_string(), serial(), primary_key_unique())
+                .column("author_id".to_string(), int(None), not_null())
+                .foreign_key_constraint(
+                    "fk_author".to_string(),
+                    "author_id".to_string(),
+                    "author".to_string(),
+                    "id".to_string(),
+                )
+                .build()
+        );
+        assert_eq!(query.to_string(), "CREATE TABLE article (id SERIAL PRIMARY KEY, author_id INT NOT NULL, CONSTRAINT fk_author FOREIGN KEY (author_id) REFERENCES author (id))")
+    }
+
+    fn create_fkey_stmt() -> CreateStmt {
+        CreateStmt {
+            name: ObjectName(vec![Ident {
+                value: "article".to_string(),
+            }]),
+            columns: vec![
+                ColumnDef {
+                    name: Ident {
+                        value: "id".to_string(),
+                    },
+                    data_type: DataType::Custom(ObjectName(vec![Ident {
+                        value: "SERIAL".to_string(),
+                    }])),
+                    options: vec![ColumnOptionDef {
+                        name: None,
+                        option: ColumnOption::Unique { is_primary: true },
+                    }],
+                },
+                ColumnDef {
+                    name: Ident {
+                        value: "author_id".to_string(),
+                    },
+                    data_type: DataType::Int(None),
+                    options: vec![ColumnOptionDef {
+                        name: None,
+                        option: ColumnOption::NotNull,
+                    }],
+                },
+            ],
+            constraints: vec![ForeignKey {
+                name: Some(Ident {
+                    value: "fk_author".to_string(),
+                }),
+                columns: vec![Ident {
+                    value: "author_id".to_string(),
+                }],
+                foreign_table: ObjectName(vec![Ident {
+                    value: "author".to_string(),
+                }]),
+                referred_columns: vec![Ident {
+                    value: "id".to_string(),
+                }],
+                // on_delete: None,
+                // on_update: None,
+            }],
+            // primary_key: Some(vec![Ident{value: "id".to_string()}]),
+            // ..Default::default()
+        }
+    }
+
+    #[test]
     fn create_table_test() {
         let query = create_stmt();
-        let builder = table("alphabet".to_string())
+        let builder = create_table("alphabet".to_string(), vec![])
             .column("id".to_string(), serial(), primary_key_unique())
             .column("letter".to_string(), varchar(None), not_null());
 
@@ -66,6 +137,7 @@ mod tests {
                     }],
                 },
             ],
+            constraints: vec![],
             // primary_key: Some(vec![Ident{value: "id".to_string()}]),
             // ..Default::default()
         }
@@ -94,9 +166,7 @@ mod tests {
     #[test]
     fn query_in_list_test() {
         let orders_query = find_orders_in_list();
-        let orders_query_builder = QueryBuilder::new()
-            .select()
-            .from("orders".to_string())
+        let orders_query_builder = select_table("orders".to_string())
             .where_("user_id".to_string())
             .in_list(vec![1, 2, 3, 4]);
         assert_eq!(orders_query_builder.build(), orders_query);
@@ -171,9 +241,7 @@ mod tests {
 
     #[test]
     fn select_builder_test() {
-        let built_query = QueryBuilder::new()
-            .select()
-            .from("users".to_string())
+        let built_query = select_table("users".to_string())
             .order_by(Some("id".to_string()))
             .limit(Some(1))
             .build();

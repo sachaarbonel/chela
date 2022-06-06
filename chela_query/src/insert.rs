@@ -14,7 +14,7 @@ pub struct InsertStmt {
     /// TABLE
     pub table_name: String,
     /// COLUMNS
-    pub columns: Vec<Ident>, //Vec<Ident>,
+    pub columns: Vec<Ident>,
     /// Overwrite (Hive)
     // pub overwrite: bool,
     // A SQL query that specifies what to insert

@@ -23,7 +23,7 @@ pub struct CreateStmt {
     pub name: ObjectName,
     /// Optional schema
     pub columns: Vec<ColumnDef>,
-    // constraints: Vec<TableConstraint>,
+    pub constraints: Vec<TableConstraint>,
     // hive_distribution: HiveDistributionStyle,
     // hive_formats: Option<HiveFormat>,
     // table_properties: Vec<SqlOption>,
@@ -39,6 +39,53 @@ pub struct CreateStmt {
     // on_commit: Option<OnCommit>,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum TableConstraint {
+    // `[ CONSTRAINT <name> ] { PRIMARY KEY | UNIQUE } (<columns>)`
+    // Unique {
+    //     name: Option<Ident>,
+    //     columns: Vec<Ident>,
+    //     /// Whether this is a `PRIMARY KEY` or just a `UNIQUE` constraint
+    //     is_primary: bool,
+    // },
+    /// A referential integrity constraint (`[ CONSTRAINT <name> ] FOREIGN KEY (<columns>)
+    /// REFERENCES <foreign_table> (<referred_columns>)
+    /// { [ON DELETE <referential_action>] [ON UPDATE <referential_action>] |
+    ///   [ON UPDATE <referential_action>] [ON DELETE <referential_action>]
+    /// }`).
+    ForeignKey {
+        name: Option<Ident>,
+        columns: Vec<Ident>,
+        foreign_table: ObjectName,
+        referred_columns: Vec<Ident>,
+        // on_delete: Option<ReferentialAction>,
+        // on_update: Option<ReferentialAction>,
+    },
+}
+
+
+impl Display for TableConstraint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TableConstraint::ForeignKey {
+                name,
+                columns,
+                foreign_table,
+                referred_columns,
+            } => write!(
+                f,
+                ", CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({})",
+                name.clone().unwrap().to_string(),
+                display_comma_separated(&columns),
+                foreign_table,
+                display_comma_separated(&referred_columns),
+            )?,
+        }
+        Ok(())
+    }
+}
+
+
 impl Display for CreateStmt {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "CREATE TABLE {} (", self.name)?;
@@ -48,7 +95,9 @@ impl Display for CreateStmt {
             }
             write!(f, "{}", column)?;
         }
+        write!(f, "{}", display_comma_separated(&self.constraints))?;
         write!(f, ")")?;
+
         Ok(())
     }
 }

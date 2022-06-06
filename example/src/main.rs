@@ -2,18 +2,18 @@ use async_trait::async_trait;
 // use chela::Column;
 // use chela::Entity;
 // use chela::Schema;
-use chela::{migrator::MigrationRunner, *};
-use chela_query::builder::{not_null, primary_key_unique, serial, QueryBuilder};
-use chela_query::*;
+use chela::*;
+use chela_query::builder::{not_null, primary_key_unique, select_table, serial, QueryBuilder};
+
 // use chela_query::create::Column;
 // use chela_query::create::ColumnType;
 use chela_query::create::DataType;
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::fmt::Display;
-use std::{any::Any, rc::Rc}; //TODO: in query create an intermediate ColumnDef
-                             // use chela_query::runner::QueryRunner;
-                             // use chela_query::DataType;
+
+//TODO: in query create an intermediate ColumnDef
+// use chela_query::runner::QueryRunner;
+// use chela_query::DataType;
 use tokio_postgres::Client;
 #[derive(ToEntity, PartialEq, Debug)]
 struct User {
@@ -22,6 +22,15 @@ struct User {
     username: String,
     #[has_many(foreign_key = "user_id", table_name = "orders")]
     orders: Vec<Order>,
+}
+
+#[derive(ToEntity, Clone, Copy, PartialEq, Debug)]
+struct Order {
+    #[primary_key(auto_increment = true)]
+    id: i32,
+    #[belongs_to(foreign_key = "id", table_name = "users")]
+    user_id: i32,
+    price: f64,
 }
 
 impl<'a> PreloadBuilder<'a> for UserRepository {
@@ -36,10 +45,10 @@ struct UserOuter {
     username: String,
 }
 
-#[derive(ToEntity, Clone, Copy, PartialEq, Debug)]
-struct Order {
+
+struct OrderUser {
     id: i32,
-    user_id: i32,
+    user: User,
     price: f64,
 }
 
@@ -72,9 +81,7 @@ fn main() {
 
 impl Builder for UserRepository {
     fn select(&self) -> QueryBuilder {
-        let query = QueryBuilder::new()
-            .select()
-            .from(self.entity.table_name.to_string());
+        let query = select_table(self.entity.table_name.to_string());
         query
     }
 }
@@ -102,13 +109,6 @@ impl QueryRunner for UserRepository {
             .clone()
             .in_list(ids)
             .build();
-
-        // let many_row0_query = QueryBuilder::new()
-        //     .select()
-        //     .from(entity.has_many[0].table_name.to_string())
-        //     .order_by(Some("id".to_string()))
-        //     .limit(Some(1))
-        //     .build();
 
         let many_row0 = client
             .query(&many_row0_query.to_string(), &[])
@@ -154,12 +154,50 @@ impl From<tokio_postgres::row::Row> for Order {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Order, User, UserOuter};
+    use crate::{Order, OrderUser, User, UserOuter};
     use itertools::Itertools;
     use std::collections::HashMap;
 
+    // #[test]
+    // fn preload_belongs_to() {
+    //     let expected_users = vec![OrderWithUser {
+    //         id: 1,
+    //         price: 200.0,
+
+    //         user: User {
+    //             id: 1,
+    //             username: "origin".to_string(),
+    //         },
+    //     }];
+    //     let users_outer = vec![UserOuter {
+    //         id: 1,
+    //         username: "origin".to_string(),
+    //     }];
+
+    //     let orders = vec![Order {
+    //         id: 1,
+    //         user_id: 1,
+    //         price: 200.0,
+    //     }];
+    //     let parent_and_ids = users_outer
+    //         .iter()
+    //         .map(|user| (user, user.id))
+    //         .collect::<Vec<_>>();
+    //     let lookup_orders = orders.into_iter().into_group_map_by(|order| order.id);
+
+    //     let result = parent_and_ids
+    //         .into_iter()
+    //         .map(|(user, id)| User {
+    //             orders: lookup_orders[&id].to_owned(),
+    //             id: user.id,
+    //             username: user.username.to_owned(),
+    //         })
+    //         .collect::<Vec<_>>();
+    //     assert_eq!(result, expected_users);
+    // }
+
     #[test]
-    fn it_works() {
+    fn preload_has_many_works() {
         let expected_users = vec![User {
             id: 1,
             username: "origin".to_string(),
