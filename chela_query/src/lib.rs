@@ -147,19 +147,32 @@ mod tests {
     fn insert_test() {
         let i = InsertStmt {
             into: true,
-            table_name: "test".to_string(),
-            columns: vec![],
+            table_name: "links".to_string(),
+            columns: vec![
+                Ident {
+                    value: "url".to_string(),
+                },
+                Ident {
+                    value: "name".to_string(),
+                },
+            ],
             source: QueryStmt {
-                body: SetExpr::Values(Values(vec![vec![Expr::Value(Value::SingleQuotedString(
-                    "test".to_string(),
-                ))]])),
+                body: SetExpr::Values(Values(vec![vec![
+                    Expr::Value(Value::SingleQuotedString(
+                        "https://www.postgresqltutorial.com".to_string(),
+                    )),
+                    Expr::Value(Value::SingleQuotedString(
+                        "PostgreSQL Tutorial".to_string(),
+                    )),
+                ]])),
                 order_by: None,
                 limit: None,
             },
         };
         assert_eq!(
             i.to_string(),
-            "INSERT INTO test VALUES ('test');".to_string()
+            "INSERT INTO links (url, name) VALUES ('https://www.postgresqltutorial.com', 'PostgreSQL Tutorial')"
+                .to_string()
         );
     }
 

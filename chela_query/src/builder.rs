@@ -1,11 +1,12 @@
 use crate::{
     create::{ColumnDef, ColumnOption, ColumnOptionDef, CreateStmt, DataType, TableConstraint},
+    insert::InsertStmt,
     query::Expr,
     query::QueryStmt,
     query::SelectItem,
     query::SetExpr,
     query::{Ident, ObjectName, Select, TableFactor, TableWithJoins},
-    values::Value,
+    values::{Value, Values},
 };
 
 #[derive(Debug, Clone)]
@@ -45,7 +46,6 @@ impl CreateBuilder {
             constraints: vec![],
         }
     }
-
 
     pub fn foreign_key_constraint(
         mut self,
@@ -301,5 +301,106 @@ impl QueryBuilder {
             order_by: self.order_by,
             limit: self.limit,
         }
+    }
+}
+
+pub struct InsertBuilder {
+    /// Only for Sqlite
+    // or: Option<SqliteOnConflict>,
+    /// INTO - optional keyword
+    pub into: bool,
+    /// TABLE
+    pub table_name: String,
+    /// COLUMNS
+    pub columns: Vec<Ident>,
+    /// Overwrite (Hive)
+    // pub overwrite: bool,
+    // A SQL query that specifies what to insert
+    pub source: QueryStmt,
+    // partitioned insert (Hive)
+    // partitioned: Option<Vec<Expr>>,
+    // Columns defined after PARTITION
+    // after_columns: Vec<Ident>,
+    // whether the insert has the table keyword (Hive)
+    // table: bool,
+    // on: Option<OnInsert>,
+}
+
+impl InsertBuilder {
+    pub fn new() -> Self {
+        Self {
+            into: true,
+            table_name: "".to_string(),
+            columns: Vec::new(),
+            source: QueryStmt {
+                body: SetExpr::Values(Values(vec![vec![]])),
+                order_by: None,
+                limit: None,
+            },
+        }
+    }
+
+    pub fn columns(mut self, columns: Vec<String>) -> InsertBuilder {
+        columns
+            .into_iter()
+            .for_each(|column| self.columns.push(Ident { value: column }));
+        self
+    }
+    pub fn column(mut self, column: String) -> InsertBuilder {
+        self.columns.push(Ident { value: column });
+        self
+    }
+
+    pub fn into(mut self, table: String) -> InsertBuilder {
+        self.table_name = table;
+        self
+    }
+
+    pub fn values(mut self, values: Vec<String>) -> InsertBuilder {
+        let expr_value = values
+            .into_iter()
+            .map(|value| Expr::Value(Value::SingleQuotedString(value)))
+            .collect::<Vec<Expr>>();
+        self.source.body = SetExpr::Values(Values(vec![expr_value]));
+        self
+    }
+
+    pub fn build(self) -> InsertStmt {
+        InsertStmt {
+            into: true,
+            table_name: self.table_name,
+            columns: self.columns,
+            source: self.source,
+        }
+    }
+}
+
+pub fn insert_into(table: String) -> InsertBuilder {
+    InsertBuilder::new().into(table)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::builder::{not_null, primary_key_unique};
+
+    #[test]
+    fn it_works() {
+        let options = primary_key_unique();
+        let not_null_option = not_null();
+        let option_1: Vec<bool> = options
+            .into_iter()
+            .filter_map(|option_def| option_def.option.is_primary())
+            .collect();
+        println!("{:#?}", option_1);
+        let option_2: Vec<bool> = not_null_option
+            .into_iter()
+            .filter_map(|option_def| option_def.option.is_primary())
+            .collect();
+        println!("{:#?}", option_2);
+        let option_1_is_unique = option_1.into_iter().next().unwrap();
+        let option_2_is_unique = option_2.into_iter().next().unwrap();
+
+        assert_eq!(option_1_is_unique, true);
+        assert_eq!(option_2_is_unique, false);
     }
 }

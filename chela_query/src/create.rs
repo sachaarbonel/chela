@@ -6,12 +6,6 @@ use crate::{
     query::{Expr, Ident, ObjectName},
 };
 
-// #[derive(Debug, PartialEq, Clone)]
-// pub struct CreateStmt {
-//     pub table_name: String,
-//     pub columns: Vec<Column>,
-// }
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct CreateStmt {
     // or_replace: bool,
@@ -63,7 +57,6 @@ pub enum TableConstraint {
     },
 }
 
-
 impl Display for TableConstraint {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -84,7 +77,6 @@ impl Display for TableConstraint {
         Ok(())
     }
 }
-
 
 impl Display for CreateStmt {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -110,6 +102,18 @@ pub struct ColumnDef {
     pub options: Vec<ColumnOptionDef>,
 }
 
+impl ColumnDef {
+    pub fn is_primary_key(&self) -> bool {
+        let option: Vec<bool> = self
+            .options
+            .clone()
+            .into_iter()
+            .filter_map(|option_def| option_def.option.is_primary())
+            .collect();
+        let is_unique = option.into_iter().next().unwrap();
+        is_unique
+    }
+}
 impl Display for ColumnDef {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
@@ -126,6 +130,15 @@ impl Display for ColumnDef {
 pub struct ColumnOptionDef {
     pub name: Option<Ident>,
     pub option: ColumnOption,
+}
+
+impl ColumnOption {
+    pub fn is_primary(&self) -> Option<bool> {
+        match self {
+            ColumnOption::Unique { is_primary } => Some(*is_primary),
+            _ => Some(false),
+        }
+    }
 }
 
 impl Display for ColumnOptionDef {
@@ -448,7 +461,7 @@ impl From<String> for DataType {
             "i64" => DataType::BigInt(None),
             "f64" => DataType::Double,
             "bool" => DataType::Boolean,
-            "String" => DataType::Varchar(Some(150)),
+            "String" => DataType::Varchar(Some(255)),
             "NaiveDate" => DataType::Date,
             "i32" => DataType::Int(None), //Serial
             "f32" => DataType::Real,

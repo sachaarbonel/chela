@@ -3,7 +3,9 @@ use async_trait::async_trait;
 // use chela::Entity;
 // use chela::Schema;
 use chela::*;
-use chela_query::builder::{not_null, primary_key_unique, select_table, serial, QueryBuilder};
+use chela_query::builder::{
+    insert_into, not_null, primary_key_unique, select_table, serial, InsertBuilder, QueryBuilder,
+};
 
 // use chela_query::create::Column;
 // use chela_query::create::ColumnType;
@@ -39,12 +41,16 @@ impl<'a> PreloadBuilder<'a> for UserRepository {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq)]
 struct UserOuter {
     id: i32,
     username: String,
 }
 
+#[derive(PartialEq)]
+struct UserNew {
+    username: String,
+}
 
 struct OrderUser {
     id: i32,
@@ -54,6 +60,9 @@ struct OrderUser {
 
 fn main() {
     let repository = UserRepository::new();
+    repository.create(UserNew {
+        username: "John".to_string(),
+    });
     let preload_query = repository
         .preload("orders")
         .clone()
@@ -84,12 +93,34 @@ impl Builder for UserRepository {
         let query = select_table(self.entity.table_name.to_string());
         query
     }
+
+    fn insert(&self) -> InsertBuilder {
+        let column_names = self
+            .entity
+            .columns
+            .clone()
+            .into_iter()
+            .filter(|column| !column.is_primary())
+            .map(|column| column.name.to_string())
+            .collect();
+        let query = insert_into(self.entity.table_name.to_string()).columns(column_names);
+        query
+    }
 }
 
 #[async_trait]
 impl QueryRunner for UserRepository {
     type Output = User;
-    async fn load(&self, client: &Client) -> Vec<Self::Output> {
+
+    type CreateInput = UserNew;
+
+    fn create(&self, input: UserNew) {
+        //client: &Client
+        // let values = self.entity.columns.into_iter().map(|column| column.name.to_string());
+        let statement = self.insert().values(vec![input.username]).build();
+        println!("{}", &statement.to_string());
+    }
+    async fn load(&self, client: &Client) -> Vec<User> {
         let entity = self.entity();
         let parent_query = self.select().build();
 
@@ -160,13 +191,14 @@ mod tests {
 
     // #[test]
     // fn preload_belongs_to() {
-    //     let expected_users = vec![OrderWithUser {
+    //     let expected_users = vec![OrderUser {
     //         id: 1,
     //         price: 200.0,
 
     //         user: User {
     //             id: 1,
     //             username: "origin".to_string(),
+    //             orders:vec![]
     //         },
     //     }];
     //     let users_outer = vec![UserOuter {

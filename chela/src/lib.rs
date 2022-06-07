@@ -1,6 +1,6 @@
 pub mod migrator;
 pub use chela_derive::*;
-use chela_query::builder::QueryBuilder;
+use chela_query::builder::{CreateBuilder, InsertBuilder, QueryBuilder};
 use chela_query::create::{ColumnDef, ColumnOptionDef, DataType};
 use chela_query::statement::Statement;
 use futures::future::join_all;
@@ -14,7 +14,12 @@ use tokio_postgres::Client;
 #[async_trait]
 pub trait QueryRunner: Builder {
     type Output;
+    type CreateInput;
     async fn load(&self, client: &Client) -> Vec<Self::Output>;
+
+    fn create(&self, input: Self::CreateInput); //->Self::Output;//client: &Client
+//delete
+//update
 }
 
 pub trait Repository {
@@ -26,8 +31,11 @@ pub trait ToEntity {
     fn to_entity() -> Entity;
 }
 
+
+//TODO: QueryDebugger
 pub trait Builder {
     fn select(&self) -> QueryBuilder;
+    fn insert(&self) -> InsertBuilder;
 }
 
 pub trait PreloadBuilder<'a> {
@@ -75,11 +83,6 @@ pub struct BelongsTo {
     pub foreign_key: String,
     pub struct_name: String,
     pub table_name: String,
-
-    //     "fk_user".to_string(),//constraint_name
-//     "user_id".to_string(),//column
-//     "users".to_string(),//foreign_table
-//     "id".to_string(),//referred_column
 }
 
 #[derive(Clone)]
